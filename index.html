@@ -1,0 +1,49 @@
+<html>
+<head>
+<title>Scrolly1</title>
+<style>/* <![CDATA[ */
+body {
+	margin: 0;
+	padding: 0;
+	background: black;
+	color: lime;
+}
+p {
+	margin: 4px 8px;
+	padding: 3px 6px;
+}
+a {
+	color: aqua;
+}
+/* ]]> */</style>
+</head>
+<body>
+
+<applet archive="Scrolly1.jar" code="togos/scrolly1/ScrollyApplet" width="100%" height="384">
+	<param name="antialiasing" value="on" />
+</applet>
+
+<p>This is an applet I wrote in one night called 'Scrolly1' which renders some pretty
+scenery by making a lot of expensive calls to AWT functions (such as to paint semi-transparent
+gradients to simulate fog).</p>
+
+<p>Keys:</p>
+
+<ul>
+<li>H - Toggle anti-aliasing on/off</li>
+<li>G - Cycle through detail modes</li>
+<li>F - Change fog opacity</li>
+<li>B - Change fog brightness</li>
+<li>L - Switch between normal / simplified / no skyscraper window lights</li>
+<li>arrow keys - accellerate the camera</li>
+<li>space bar - immediately halt camera movement</li>
+</ul>
+
+<p>You will probably need to click on the applet before keys work.
+There are some features not documented, here.
+<a href="Scrolly1.jar">The jar</a> can also be run stand-alone.</p>
+
+<p>- <a href="http://www.nuke24.net/">TOGoS</a></p>
+
+</body>
+</html>

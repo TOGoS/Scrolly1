@@ -10,13 +10,30 @@ public class ScrollyApplet extends Apallit
 {
 	private static final long serialVersionUID = 6696808930542288751L;
 	
-	public int autoScaleArea = 1024*1024;
+	final ScrollyPaintable sp = new ScrollyPaintable();
+	int autoScaleArea = 384*384;
+	
+	public ScrollyApplet() {
+		super("Scrolly1");
+	}
 	
 	protected void dealWithAppletParameters() {
 		String k;
 		
+		sp.antialiasing = true;
+		if( this.getParameterInfo() == null ) return;
+		
 		k = getParameter("auto-scale-area");
 		if( k != null ) autoScaleArea = Integer.parseInt(k);
+		
+		k = getParameter("antialiasing");
+		if( k != null ) {
+			k = k.toLowerCase();
+			if( !k.equals("no") && !k.equals("false") && !k.equals("off") ) {
+				sp.antialiasing = true;
+			}
+		}
+		System.err.println(getParameter("antialiasing"));
 	}
 	
 	class AccellerativePositionFunction
@@ -58,7 +75,6 @@ public class ScrollyApplet extends Apallit
 		}
 	}
 	
-	ScrollyPaintable sp;
 	AccellerativePositionFunction apf;
 	double maxAccelleration = 30;
 	
@@ -73,7 +89,6 @@ public class ScrollyApplet extends Apallit
 	public void init() {
 		super.init();
 		dealWithAppletParameters();
-		sp = new ScrollyPaintable();
 		sp.init();
 		apf = new AccellerativePositionFunction( System.currentTimeMillis(), -2000, 0, 0, 10, 2, 0, 0, 0, 0 );
 		sp.positionFunction = apf;
@@ -114,7 +129,18 @@ public class ScrollyApplet extends Apallit
 					setPosition( apf.withVelocityAndAccelleration( System.currentTimeMillis(), 0, 0, 0, 0, 0, 0 ) );
 					break;
 				case( KeyEvent.VK_H ):
-					sp.highQuality = !sp.highQuality;
+					sp.antialiasing = !sp.antialiasing;
+					break;
+				case( KeyEvent.VK_B ):
+					sp.fogBrightness *= 1.25;
+					if( sp.fogBrightness > 4 ) sp.fogBrightness = 0.5f;
+					break;
+				case( KeyEvent.VK_F ):
+					sp.fogOpacity *= 1.25;
+					if( sp.fogOpacity > 4 ) sp.fogOpacity = 0.5f;
+					break;
+				case( KeyEvent.VK_L ):
+					sp.windowLightMode = (sp.windowLightMode + 1) % ScrollyPaintable.WINDOW_LIGHTS_MODE_COUNT;
 					break;
 				case( KeyEvent.VK_G ):
 					if( dbc.autoScaleArea > 1024 * 1024 ) {
@@ -145,7 +171,7 @@ public class ScrollyApplet extends Apallit
 		requestFocus();
 	}
 	
-	public static void main() {
+	public static void main( String[] args ) {
 		ScrollyApplet a = new ScrollyApplet();
 		a.runWindowed();
 	}

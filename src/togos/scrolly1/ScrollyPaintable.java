@@ -55,13 +55,39 @@ public class ScrollyPaintable implements TimestampedPaintable
 			this( c, s, Collections.EMPTY_LIST );
 		}
 		
-		public void draw( long timestamp, Graphics2D g2d ) {
+		protected void drawBody( long timestamp, Graphics2D g2d ) {
 			g2d.setColor( color.getAwtColor(timestamp) );
 			g2d.fill( shape );
+		}
+		
+		public void draw( long timestamp, Graphics2D g2d ) {
+			drawBody( timestamp, g2d );
 			AffineTransform oldXf = g2d.getTransform();
 			for( LayerObjectInstance soi : subObjects ) {
 				_draw( soi, timestamp, g2d );
 				g2d.setTransform(oldXf);
+			}
+		}
+	}
+	
+	class Building extends LayerObject {
+		final List<LayerObjectInstance> windows;
+		
+		public Building(ColorFunction c, Shape s, List<LayerObjectInstance> subObjects, List<LayerObjectInstance> windows ) {
+			super(c, s, subObjects);
+			this.windows = windows;
+		}
+		
+		@Override protected void drawBody( long timestamp, Graphics2D g2d ) {
+			super.drawBody( timestamp, g2d );
+			switch( windowLightMode ) {
+			case( WINDOW_LIGHTS_NORMAL ):
+				AffineTransform oldXf = g2d.getTransform();
+				for( LayerObjectInstance soi : windows ) {
+					_draw( soi, timestamp, g2d );
+					g2d.setTransform(oldXf);
+				}
+				break;
 			}
 		}
 	}
@@ -159,7 +185,7 @@ public class ScrollyPaintable implements TimestampedPaintable
 		if( width%2 == 1 ) width++;
 		int baseX = -width / 2;
 		double lightChance = 0.5;
-		for( int f=2; f<floorsHigh; ++f ) {
+		for( int f=2; f<floorsHigh-1; ++f ) {
 			for( int p=0; p<roomsWide; ++p ) {
 				if( allLightsOn || r.nextDouble() < lightChance ) {
 					int roomX = baseX + windowSeparation + p * (windowWidth+windowSeparation)*2;
@@ -174,7 +200,7 @@ public class ScrollyPaintable implements TimestampedPaintable
 			if( lightChance > 1 ) lightChance = 1;
 		}
 		
-		return new LayerObject( BLACK, new Rectangle(baseX, -20, width, floorsHigh*floorHeight + 20), windows ); 
+		return new Building( BLACK, new Rectangle(baseX, -20, width, floorsHigh*floorHeight + 20), Collections.EMPTY_LIST, windows ); 
 	}
 	
 	public void init() {
@@ -291,24 +317,35 @@ public class ScrollyPaintable implements TimestampedPaintable
 		beginTimestamp = System.currentTimeMillis();
 	}
 	
-	LinearGradientPaint fogPaint = new LinearGradientPaint(0, 0, 0, 2048,
-		new float[] { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f },
-		new Color[] {
-			new Color( 0.35f, 0.3f, 0.4f, 0.20f ),
-			new Color( 0.35f, 0.3f, 0.4f, 0.10f ),
-			new Color( 0.35f, 0.3f, 0.4f, 0.05f ),
-			new Color( 0.35f, 0.3f, 0.4f, 0.01f ),
-			new Color( 0.35f, 0.3f, 0.4f, 0.00f ),
-		}
-	);
+	protected static float clamp( float c ) {
+		return c < 0 ? 0 : c > 1 ? 1 : c;
+	}
+	
+	protected static Color brighten( float r, float g, float b, float alph, float brightness ) {
+		return new Color( clamp(r*brightness), clamp(g*brightness), clamp(b*brightness), alph );
+	}
+	
+	protected Color fogColor( float relativeOpacity ) {
+		return new Color( clamp(fogR*fogBrightness), clamp(fogG*fogBrightness), clamp(fogB*fogBrightness), relativeOpacity*fogOpacity );
+
+	}
+	
+	public static final int WINDOW_LIGHTS_OFF    = 0;
+	public static final int WINDOW_LIGHTS_SIMPLE = 1;
+	public static final int WINDOW_LIGHTS_NORMAL = 2;
+	public static final int WINDOW_LIGHTS_MODE_COUNT = 3;
 	
 	PositionFunction positionFunction = new ConstantPositionFunction( 0, 0, 0 );
-	public boolean highQuality = false;
+	public boolean antialiasing = false;
 	public double baseScale = 1.0;
+	public float fogBrightness = 1.0f;
+	public float fogOpacity    = 1.0f;
+	public float fogR = 0.35f, fogG = 0.3f, fogB = 0.4f;
+	public int windowLightMode = WINDOW_LIGHTS_NORMAL;
 	
 	@Override
 	public void paint(long timestamp, int width, int height, Graphics2D g2d) {
-		if( highQuality ) {
+		if( antialiasing ) {
 			g2d.setRenderingHint( RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON );
 			g2d.setRenderingHint( RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY );
 		}
@@ -343,6 +380,17 @@ public class ScrollyPaintable implements TimestampedPaintable
 		// double worldCenterY = 10 + (timestamp - beginTimestamp) / 400f;
 		// double worldCenterY = value( groundHeight, worldCenterX, 0, 0 ) + 10;
 		//double worldCenterY = 300 + 300 * TMath.periodic(timestamp, 32000);
+		
+		LinearGradientPaint fogPaint = new LinearGradientPaint(0, 0, 0, 4096,
+			new float[] { 0.0f, 0.15f, 0.3f, 0.6f, 1.0f },
+			new Color[] {
+				fogColor( 0.20f ),
+				fogColor( 0.10f ),
+				fogColor( 0.05f ),
+				fogColor( 0.01f ),
+				fogColor( 0.00f ),
+			}
+		);
 		
 		for( Layer l : sortedLayers ) {
 			if( l.distance - pos[2] < 10 ) continue;
