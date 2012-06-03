@@ -97,6 +97,7 @@ public class ScrollyPaintable implements TimestampedPaintable
 	}
 	
 	static final ConstantColorFunction BLACK = new ConstantColorFunction(Color.BLACK);
+	static final ConstantColorFunction WINDOW_COLOR = new ConstantColorFunction(new Color(0.85f, 0.85f, 0.8f));
 	
 	LFunctionDaDaDa_Da groundHeight = new Add( new LFunctionDaDaDa_Da[] {
 		new Scale( 0.050, 0.050, 0.050,  10, D5_2Perlin.instance ),
@@ -139,6 +140,39 @@ public class ScrollyPaintable implements TimestampedPaintable
 	protected LayerObject mast( Random r ) {
 		double height = 180 + r.nextGaussian() * 60;
 		return mast( height, (int)(height / 60 + r.nextInt(1)), r.nextInt(3) - 1, r.nextInt() % 4000 );
+	}
+	
+	protected LayerObject building( Random r ) {
+		int windowWidth = 1+r.nextInt(3);
+		int windowHeight = 1+r.nextInt(3);
+		int windowSeparation = 1 + r.nextInt(3);
+		int floorHeight = windowHeight+2+r.nextInt(3);
+		int floorsHigh = 1 + r.nextInt(4)*r.nextInt(4)*r.nextInt(4)*r.nextInt(4); // in floors
+		int roomsWide = floorsHigh / 10 + r.nextInt(6); // in window [pairs]
+		
+		boolean allLightsOn = floorsHigh < 20 && r.nextDouble() < 0.2;
+		
+		List<LayerObjectInstance> windows = new ArrayList();
+		int width = (roomsWide * (windowWidth*2 + windowSeparation)) + ((roomsWide + 1) * windowSeparation);
+		if( width%2 == 1 ) width++;
+		int baseX = -width / 2;
+		double lightChance = 0.5;
+		for( int f=2; f<floorsHigh; ++f ) {
+			for( int p=0; p<roomsWide; ++p ) {
+				if( allLightsOn || r.nextDouble() < lightChance ) {
+					int roomX = baseX + windowSeparation + p * (windowWidth+windowSeparation)*2;
+					windows.add( new LayerObjectInstance( roomX, f*floorHeight,
+						new LayerObject( WINDOW_COLOR, new Rectangle(windowWidth, windowHeight))));
+					windows.add( new LayerObjectInstance( roomX + windowWidth+windowSeparation, f*floorHeight,
+						new LayerObject( WINDOW_COLOR, new Rectangle(windowWidth, windowHeight))));
+				}
+			}
+			lightChance += r.nextGaussian() * 0.2;
+			if( lightChance < 0 ) lightChance = 0;
+			if( lightChance > 1 ) lightChance = 1;
+		}
+		
+		return new LayerObject( BLACK, new Rectangle(baseX, -20, width, floorsHigh*floorHeight + 20), windows ); 
 	}
 	
 	public void init() {
@@ -223,9 +257,17 @@ public class ScrollyPaintable implements TimestampedPaintable
 			}
 			// Buildings
 			if( dist < 1500 ) {
-				for( int j=0; j<200; ++j ) {
+				for( int j=0; j<100; ++j ) {
 					double x = r.nextGaussian() * 2000 + 2000;
 					layerObjects.add( new LayerObjectInstance( x, value( groundHeight, x, 0, dist ), r.nextBoolean() ? o2 : r.nextBoolean() ? o3 : r.nextBoolean() ? o4 : o5 ) );
+				}
+			}
+			// Skyscrapers
+			if( dist < 1500 ) {
+				for( int j=0; j<100; ++j ) {
+					double x = r.nextGaussian() * 1000 + 2000;
+					layerObjects.add( new LayerObjectInstance( x, value( groundHeight, x, 0, dist ), building(r) ) );
+						// r.nextBoolean() ? o2 : r.nextBoolean() ? o3 : r.nextBoolean() ? o4 : o5 ) );
 				}
 			}
 			// Radio towers
