@@ -21,6 +21,7 @@ public class Apallit extends Applet
 	
 	String title;
 	ServiceManager sman = new ServiceManager();
+	DoubleBufferedCanvas dbc;
 	
 	public Apallit( String title ) {
 		setTitle( title );
@@ -56,7 +57,7 @@ public class Apallit extends Applet
 	public void fillWith( final TimestampedPaintable paintable,
 		int preferredWidth, int preferredHeight, final long repaintInterval, int autoScaleArea
 	) {
-		final DoubleBufferedCanvas dbc = new DoubleBufferedCanvas() {
+		dbc = new DoubleBufferedCanvas() {
 			private static final long serialVersionUID = 1L;
 
 			@Override

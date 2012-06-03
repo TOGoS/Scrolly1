@@ -5,19 +5,19 @@ import java.awt.Canvas;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
-import java.awt.image.BufferedImage;
+import java.awt.image.VolatileImage;
 
 public abstract class DoubleBufferedCanvas extends Canvas
 {
 	private static final long serialVersionUID = 1L;
 	
-	BufferedImage buffer;
+	VolatileImage buffer;
 	int scaling = 1;
 	int autoScaleArea = Integer.MAX_VALUE;
 	
-	protected BufferedImage getBuffer( int width, int height ) {
+	protected VolatileImage getBuffer( int width, int height ) {
 		if( buffer == null || buffer.getWidth() != width || buffer.getHeight() != height ) {
-			buffer = getGraphicsConfiguration().createCompatibleImage(width, height);
+			buffer = getGraphicsConfiguration().createCompatibleVolatileImage(width, height);
 		}
 		return buffer;
 	}

@@ -193,7 +193,7 @@ public class ScrollyPaintable implements TimestampedPaintable
 		LayerObject mast = new LayerObject( BLACK, new Rectangle( -2, -20, 4, 260 ), mastLights );
 		*/
 		
-		LayerObject pineTree = new LayerObject( BLACK, new Polygon( new int[] { -1, -1, -4, 0, 4, 1, 1 }, new int[]{ -2, 1, 1, 16, 1, 1, -2 }, 7 ) );
+		LayerObject pineTree = new LayerObject( BLACK, new Polygon( new int[] { -1, -1, -4, 0, 4, 1, 1 }, new int[]{ -2, 0, 0, 15, 0, 0, -2 }, 7 ) );
 		
 		Random r = new Random(123123);
 		
@@ -303,11 +303,15 @@ public class ScrollyPaintable implements TimestampedPaintable
 	);
 	
 	PositionFunction positionFunction = new ConstantPositionFunction( 0, 0, 0 );
+	public boolean highQuality = false;
+	public double baseScale = 1.0;
 	
 	@Override
 	public void paint(long timestamp, int width, int height, Graphics2D g2d) {
-		g2d.setRenderingHint( RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON );
-		g2d.setRenderingHint( RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY );
+		if( highQuality ) {
+			g2d.setRenderingHint( RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON );
+			g2d.setRenderingHint( RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY );
+		}
 		
 		Random r = new Random(123123);
 		
@@ -341,7 +345,9 @@ public class ScrollyPaintable implements TimestampedPaintable
 		//double worldCenterY = 300 + 300 * TMath.periodic(timestamp, 32000);
 		
 		for( Layer l : sortedLayers ) {
-			double scale = height / 3 / l.distance - pos[2];
+			if( l.distance - pos[2] < 10 ) continue;
+			
+			double scale = baseScale * height / 3 / (l.distance - pos[2]);
 			
 			g2d.scale( scale, -scale );
 			
