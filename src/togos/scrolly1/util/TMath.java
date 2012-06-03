@@ -35,4 +35,8 @@ public final class TMath
 	public static final float periodic( long input, long period ) {
 		return periodic24( (int)((input << 24) / period) );
 	}
+	
+	public static final int fdMod( int num, int den ) {
+		return (num > 0 ? num : den + (num % den)) % den;
+	}
 }

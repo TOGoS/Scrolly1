@@ -327,7 +327,6 @@ public class ScrollyPaintable implements TimestampedPaintable
 	
 	protected Color fogColor( float relativeOpacity ) {
 		return new Color( clamp(fogR*fogBrightness), clamp(fogG*fogBrightness), clamp(fogB*fogBrightness), relativeOpacity*fogOpacity );
-
 	}
 	
 	public static final int WINDOW_LIGHTS_OFF    = 0;

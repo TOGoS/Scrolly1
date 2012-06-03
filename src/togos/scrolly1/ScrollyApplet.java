@@ -5,6 +5,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
 import togos.scrolly1.tfunc.PositionFunction;
+import togos.scrolly1.util.TMath;
 
 public class ScrollyApplet extends Apallit
 {
@@ -94,7 +95,16 @@ public class ScrollyApplet extends Apallit
 		sp.positionFunction = apf;
 		fillWith( sp, 1024, 512, 30, autoScaleArea );
 		KeyListener kl = new KeyListener() {
+			boolean shiftPressed;
 			boolean upPressed, downPressed, leftPressed, rightPressed, inPressed, outPressed;
+			
+			protected float powerCycle( float value, int minPower, int maxPower ) {
+				double base = 1.25;
+				int currentPower = (int)Math.round(Math.log(value)/Math.log(base));
+				currentPower += shiftPressed ? -1 : 1;
+				currentPower = minPower + TMath.fdMod( currentPower-minPower, maxPower-minPower );
+				return (float)Math.pow( base, currentPower );
+			}
 			
 			protected void updateAccelleration() {
 				double ddx = 0, ddy = 0, ddz = 0;
@@ -113,6 +123,7 @@ public class ScrollyApplet extends Apallit
 			
 			@Override public void keyReleased(KeyEvent kevt) {
 				switch( kevt.getKeyCode() ) {
+				case( KeyEvent.VK_SHIFT ): shiftPressed = false; break;
 				case( KeyEvent.VK_UP    ): case( KeyEvent.VK_W ): upPressed = false; break;
 				case( KeyEvent.VK_LEFT  ): case( KeyEvent.VK_A ): leftPressed = false; break;
 				case( KeyEvent.VK_DOWN  ): case( KeyEvent.VK_S ): downPressed = false; break;
@@ -132,21 +143,26 @@ public class ScrollyApplet extends Apallit
 					sp.antialiasing = !sp.antialiasing;
 					break;
 				case( KeyEvent.VK_B ):
-					sp.fogBrightness *= 1.25;
-					if( sp.fogBrightness > 4 ) sp.fogBrightness = 0.5f;
+					sp.fogBrightness = powerCycle(sp.fogBrightness, -10, +10);
+					break;
+				case( KeyEvent.VK_C ):
+					sp.fogR = (float)(Math.random() * 0.5);
+					sp.fogG = (float)(Math.random() * 0.5);
+					sp.fogB = (float)(Math.random() * 0.5);
 					break;
 				case( KeyEvent.VK_F ):
-					sp.fogOpacity *= 1.25;
-					if( sp.fogOpacity > 4 ) sp.fogOpacity = 0.5f;
+					sp.fogOpacity = powerCycle(sp.fogOpacity, -10, +10);
 					break;
 				case( KeyEvent.VK_L ):
 					sp.windowLightMode = (sp.windowLightMode + 1) % ScrollyPaintable.WINDOW_LIGHTS_MODE_COUNT;
 					break;
 				case( KeyEvent.VK_G ):
+					if( shiftPressed ) dbc.autoScaleArea /= 2; else dbc.autoScaleArea *= 2;
+					
 					if( dbc.autoScaleArea > 1024 * 1024 ) {
-						dbc.autoScaleArea = 256 * 256;
-					} else {
-						dbc.autoScaleArea *= 2;
+						dbc.autoScaleArea = 64 * 64;
+					} else if( dbc.autoScaleArea < 64 * 64 ) {
+						dbc.autoScaleArea = 1024 * 1024;
 					}
 					break;
 				case( KeyEvent.VK_EQUALS ): case( KeyEvent.VK_PLUS ):
@@ -155,6 +171,7 @@ public class ScrollyApplet extends Apallit
 				case( KeyEvent.VK_MINUS ):
 					sp.baseScale *= 0.75;
 					break;
+				case( KeyEvent.VK_SHIFT ): shiftPressed = true; break;
 				case( KeyEvent.VK_UP    ): case( KeyEvent.VK_W ): upPressed = true; break;
 				case( KeyEvent.VK_LEFT  ): case( KeyEvent.VK_A ): leftPressed = true; break;
 				case( KeyEvent.VK_DOWN  ): case( KeyEvent.VK_S ): downPressed = true; break;
