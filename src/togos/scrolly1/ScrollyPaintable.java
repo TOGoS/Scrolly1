@@ -225,11 +225,11 @@ public class ScrollyPaintable implements TimestampedPaintable
 		
 		ScalarFunction[] pineTreeWagPhases = new ScalarFunction[8];
 		for( int i=0; i<pineTreeWagPhases.length; ++i ) {
-			final double baseRot = (r.nextGaussian() - 0.5) * 0.15;
-			final long offset = r.nextLong() % 3000;
+			final double baseRot = r.nextGaussian() * 0.15;
+			final long offset = r.nextLong() % (3000 + i*300);
 			pineTreeWagPhases[i] = new ScalarFunction() {
 				@Override public double getValue(long at) {
-					return baseRot + (TMath.periodic( at+offset, 3000 )-0.5) * 0.05;
+					return baseRot + TMath.periodic( at+offset, 3000 ) * 0.05;
 				}
 			};
 		}
