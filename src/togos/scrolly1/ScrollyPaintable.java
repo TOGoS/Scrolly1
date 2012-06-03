@@ -23,7 +23,9 @@ import togos.scrolly1.noise.Scale;
 import togos.scrolly1.noise.ZFilter;
 import togos.scrolly1.tfunc.ColorFunction;
 import togos.scrolly1.tfunc.ConstantColorFunction;
+import togos.scrolly1.tfunc.ConstantPositionFunction;
 import togos.scrolly1.tfunc.ConstantScalarFunction;
+import togos.scrolly1.tfunc.PositionFunction;
 import togos.scrolly1.tfunc.PulsatingColorFunction;
 import togos.scrolly1.tfunc.ScalarFunction;
 import togos.scrolly1.util.TMath;
@@ -300,6 +302,8 @@ public class ScrollyPaintable implements TimestampedPaintable
 		}
 	);
 	
+	PositionFunction positionFunction = new ConstantPositionFunction( 0, 0, 0 );
+	
 	@Override
 	public void paint(long timestamp, int width, int height, Graphics2D g2d) {
 		g2d.setRenderingHint( RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON );
@@ -328,22 +332,25 @@ public class ScrollyPaintable implements TimestampedPaintable
 		g2d.translate( width/2, height/2 );
 		AffineTransform baseTransform = g2d.getTransform();
 		
-		double worldCenterX = (timestamp - beginTimestamp) / 10f;
-		//double worldCenterY = 10 + (timestamp - beginTimestamp) / 400f;
-		//double worldCenterY = value( groundHeight, worldCenterX, 0, 0 ) + 10;
-		double worldCenterY = 300 + 300 * TMath.periodic(timestamp, 32000);
+		double[] pos = new double[3];
+		positionFunction.getPosition(timestamp, pos);
+		
+		//double worldCenterX = (timestamp - beginTimestamp) / 10f;
+		// double worldCenterY = 10 + (timestamp - beginTimestamp) / 400f;
+		// double worldCenterY = value( groundHeight, worldCenterX, 0, 0 ) + 10;
+		//double worldCenterY = 300 + 300 * TMath.periodic(timestamp, 32000);
 		
 		for( Layer l : sortedLayers ) {
-			double scale = height / 3 / l.distance;
+			double scale = height / 3 / l.distance - pos[2];
 			
 			g2d.scale( scale, -scale );
 			
 			double worldScreenWidth = width/scale;
 			double worldScreenHeight = height/scale;
-			double worldScreenRight = worldCenterX - worldScreenWidth/2;
-			double worldScreenBottom = worldCenterY - worldScreenHeight/2;
+			double worldScreenRight = pos[0] - worldScreenWidth/2;
+			double worldScreenBottom = pos[1] - worldScreenHeight/2;
 					
-			g2d.translate( -worldCenterX, -worldCenterY );
+			g2d.translate( -pos[0], -pos[1] );
 			
 			//Color topColor = new Color( 0.35f, 0.3f, 0.4f, 0.01f );
 			//Color topColor = new Color( 0.0f, 0.0f, 0.0f, 0.00f );
