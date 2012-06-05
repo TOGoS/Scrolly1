@@ -9,8 +9,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 
-import togos.scrolly1.gfx.AWTRenderer;
-import togos.scrolly1.gfx.Renderer;
+import togos.scrolly1.gfx.AWTScrollyGraphicsOutput;
+import togos.scrolly1.gfx.ScrollyGraphicsOutput;
 import togos.scrolly1.noise.Add;
 import togos.scrolly1.noise.Constant;
 import togos.scrolly1.noise.D5_2Perlin;
@@ -33,12 +33,12 @@ public class ScrollyPaintable implements TimestampedPaintable
 	static {
 		for( int i=0; i<starColors.length; ++i ) {
 			int intensity = (i) * 160 / starColors.length;
-			starColors[i] = new Color( intensity, intensity, intensity );
+			starColors[i] = new Color( 255, 255, 255, intensity );
 		}
 	}
 	
 	interface Drawable {
-		public abstract void draw( long timestamp, Renderer ren );
+		public abstract void draw( long timestamp, ScrollyGraphicsOutput ren );
 	}
 	
 	static class DrawableShape implements Drawable {
@@ -52,7 +52,7 @@ public class ScrollyPaintable implements TimestampedPaintable
 			this.nTriangles = nTriangles; this.trianglePointsX = trianglePointsX; this.trianglePointsY = trianglePointsY;
 		}
 		
-		@Override public void draw(long timestamp, Renderer ren) {
+		@Override public void draw(long timestamp, ScrollyGraphicsOutput ren) {
 			if( nQuads > 0 ) ren.quads( quadPointsX, quadPointsY, nQuads );
 			if( nTriangles > 0 ) ren.triangles( trianglePointsX, trianglePointsY, nTriangles );
 		}
@@ -126,13 +126,13 @@ public class ScrollyPaintable implements TimestampedPaintable
 			this( cf, s, Collections.EMPTY_LIST );
 		}
 		
-		@Override public void draw( long timestamp, Renderer ren ) { 
+		@Override public void draw( long timestamp, ScrollyGraphicsOutput ren ) { 
 			ren.setColor( cf.getAwtColor(timestamp) );
 			shape.draw(timestamp, ren);
-			Object oldXf = ren.getTransform();
+			Object oldXf = ren.saveTransform();
 			for( LayerObjectInstance soi : subObjects ) {
 				_draw( soi, timestamp, ren );
-				ren.setTransform(oldXf);
+				ren.restoreTransform(oldXf);
 			}
 		}
 	}
@@ -146,15 +146,15 @@ public class ScrollyPaintable implements TimestampedPaintable
 			this.windows = windows;
 		}
 		
-		@Override public void draw( long timestamp, Renderer ren ) {
+		@Override public void draw( long timestamp, ScrollyGraphicsOutput ren ) {
 			ren.setColor( Color.BLACK );
 			bodyShape.draw(timestamp, ren);
 			switch( windowLightMode ) {
 			case( WINDOW_LIGHTS_NORMAL ):
-				Object oldXf = ren.getTransform();
+				Object oldXf = ren.saveTransform();
 				for( LayerObjectInstance soi : windows ) {
 					_draw( soi, timestamp, ren );
-					ren.setTransform(oldXf);
+					ren.restoreTransform(oldXf);
 				}
 				break;
 			}
@@ -409,8 +409,8 @@ public class ScrollyPaintable implements TimestampedPaintable
 		return new Color( clamp(r*brightness), clamp(g*brightness), clamp(b*brightness), alph );
 	}
 	
-	protected Color fogColor( float relativeOpacity ) {
-		return new Color( clamp(fogR*fogBrightness), clamp(fogG*fogBrightness), clamp(fogB*fogBrightness), relativeOpacity*fogOpacity );
+	protected Color fogColor( float opacity ) {
+		return new Color( clamp(fogR*fogBrightness), clamp(fogG*fogBrightness), clamp(fogB*fogBrightness), clamp(opacity) );
 	}
 	
 	public static final int WINDOW_LIGHTS_OFF    = 0;
@@ -422,11 +422,11 @@ public class ScrollyPaintable implements TimestampedPaintable
 	public boolean antialiasing = false;
 	public double baseScale = 1.0;
 	public float fogBrightness = 1.0f;
-	public float fogOpacity    = 1.0f;
+	public float fogOpacity    = 0.002f;
 	public float fogR = 0.35f, fogG = 0.3f, fogB = 0.4f;
 	public int windowLightMode = WINDOW_LIGHTS_NORMAL;
 	
-	public void paint(long timestamp, int width, int height, Renderer ren) {
+	public void paint(long timestamp, int width, int height, ScrollyGraphicsOutput ren) {
 		Random r = new Random(123123);
 		
 		ren.setColor( Color.BLACK );
@@ -447,12 +447,15 @@ public class ScrollyPaintable implements TimestampedPaintable
 			}
 		});
 		
+		//if( true ) return;
+		
 		ren.translate( width/2, height/2 );
-		Object baseTransform = ren.getTransform();
+		Object baseTransform = ren.saveTransform();
 		
 		double[] pos = new double[3];
 		positionFunction.getPosition(timestamp, pos);
 		
+		double prevLayerDist = 16000;
 		for( Layer l : sortedLayers ) {
 			if( l.distance - pos[2] < 10 ) continue;
 			
@@ -467,7 +470,9 @@ public class ScrollyPaintable implements TimestampedPaintable
 			
 			ren.translate( -pos[0], -pos[1] );
 			
-			ren.verticalGradient( (float)worldScreenRight-2, -1024, (float)worldScreenLeft+2, 4096, fogColor(0.4f), fogColor(0.0f));
+			double fogDepth = prevLayerDist - l.distance;
+			double fogTrans = Math.pow( 1 - fogOpacity, fogDepth );
+			ren.verticalGradient( (float)worldScreenRight-2, -1024, (float)worldScreenLeft+2, 4096, fogColor((float)(1-fogTrans)), fogColor(0.0f));
 			
 			/** Estimate of maximum distance (in world units)
 			 * outside the screen something might be that we should still draw */
@@ -489,17 +494,19 @@ public class ScrollyPaintable implements TimestampedPaintable
 				--beginIdx;
 			}
 			final int objCount = l.objects.size();
-			Object xf = ren.getTransform();
+			Object xf = ren.saveTransform();
 			for( int idx = beginIdx; idx < objCount ; ++idx ) {
 				LayerObjectInstance loi = l.objects.get(idx);
 				try {
 					if( loi.x - maxRad > worldScreenRight + worldScreenWidth ) break;
 					_draw( loi, timestamp, ren );
 				} finally {
-					ren.setTransform(xf);
+					ren.restoreTransform(xf);
 				}
 			}
-			ren.setTransform( baseTransform );
+			ren.restoreTransform( baseTransform );
+			
+			prevLayerDist = l.distance;
 		}
 	}
 	
@@ -510,10 +517,10 @@ public class ScrollyPaintable implements TimestampedPaintable
 			g2d.setRenderingHint( RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY );
 		}
 		
-		paint( timestamp, width, height, new AWTRenderer(g2d));
+		paint( timestamp, width, height, new AWTScrollyGraphicsOutput(g2d));
 	}
 
-	protected void _draw( LayerObjectInstance loi, long timestamp, Renderer ren ) {
+	protected void _draw( LayerObjectInstance loi, long timestamp, ScrollyGraphicsOutput ren ) {
 		ren.translate( loi.x, loi.y );
 		ren.rotate( loi.rot.getValue(timestamp) );
 		ren.scale( loi.scale, loi.scale );

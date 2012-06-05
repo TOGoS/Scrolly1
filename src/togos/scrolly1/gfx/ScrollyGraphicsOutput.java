@@ -2,10 +2,10 @@ package togos.scrolly1.gfx;
 
 import java.awt.Color;
 
-public interface Renderer
+public interface ScrollyGraphicsOutput
 {
-	public Object getTransform();
-	public void setTransform( Object xf );
+	public Object saveTransform();
+	public void restoreTransform( Object xf );
 	public void translate( double x, double y );
 	public void scale( double xScale, double yScale );
 	public void rotate( double amt );

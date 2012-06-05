@@ -6,19 +6,19 @@ import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.geom.AffineTransform;
 
-public class AWTRenderer implements Renderer
+public class AWTScrollyGraphicsOutput implements ScrollyGraphicsOutput
 {
 	protected final Graphics2D g2d;
 	
-	public AWTRenderer( Graphics2D g2d ) {
+	public AWTScrollyGraphicsOutput( Graphics2D g2d ) {
 		this.g2d = g2d;
 	}
 	
-	@Override public Object getTransform() {
+	@Override public Object saveTransform() {
 		return g2d.getTransform();
 	}
 
-	@Override public void setTransform(Object xf) {
+	@Override public void restoreTransform(Object xf) {
 		g2d.setTransform( (AffineTransform)xf );
 	}
 
