@@ -5,7 +5,6 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
 import togos.scrolly1.tfunc.AccellerativePositionFunction;
-import togos.scrolly1.util.TMath;
 
 public class ScrollyApplet extends Apallit
 {
@@ -21,7 +20,6 @@ public class ScrollyApplet extends Apallit
 	protected void dealWithAppletParameters() {
 		String k;
 		
-		sp.antialiasing = true;
 		if( this.getParameterInfo() == null ) return;
 		
 		k = getParameter("auto-scale-area");
@@ -38,7 +36,6 @@ public class ScrollyApplet extends Apallit
 	}
 	
 	AccellerativePositionFunction apf;
-	double maxAccelleration = 30;
 	
 	protected void setPosition( AccellerativePositionFunction apf ) {
 		sp.positionFunction = apf;
@@ -48,102 +45,47 @@ public class ScrollyApplet extends Apallit
 		setPosition( apf.withAccelleration( System.currentTimeMillis(), ddx, ddy, ddz ) );
 	}
 	
+	class SimpleKeyboardKeyListener implements KeyListener {
+		SimpleKeyboardListener skl;
+		
+		public SimpleKeyboardKeyListener( SimpleKeyboardListener l ) {
+			this.skl = l;
+		}
+		
+		@Override public void keyPressed(KeyEvent e) { skl.keyDown(e.getKeyCode(), e.getKeyChar()); }
+		@Override public void keyReleased(KeyEvent e) { skl.keyUp(e.getKeyCode(), e.getKeyChar()); }
+		@Override public void keyTyped(KeyEvent e) { /* no-op */ }
+	}
+	
 	public void init() {
 		super.init();
 		dealWithAppletParameters();
 		sp.init();
-		apf = new AccellerativePositionFunction( System.currentTimeMillis(), -2000, 0, 0, 10, 2, 0, 0, 0, 0 );
-		sp.positionFunction = apf;
+		sp.positionFunction = new AccellerativePositionFunction( System.currentTimeMillis(), -2000, 0, 0, 10, 2, 0, 0, 0, 0 );
 		fillWith( sp, 1024, 512, 30, autoScaleArea );
-		KeyListener kl = new KeyListener() {
-			boolean shiftPressed;
-			boolean upPressed, downPressed, leftPressed, rightPressed, inPressed, outPressed;
-			
-			protected float powerCycle( float value, int minPower, int maxPower ) {
-				double base = 1.25;
-				int currentPower = (int)Math.round(Math.log(value)/Math.log(base));
-				currentPower += shiftPressed ? -1 : 1;
-				currentPower = minPower + TMath.fdMod( currentPower-minPower, maxPower-minPower );
-				return (float)Math.pow( base, currentPower );
-			}
-			
-			protected void updateAccelleration() {
-				double ddx = 0, ddy = 0, ddz = 0;
-				if( leftPressed && !rightPressed ) ddx = -maxAccelleration; 
-				if( rightPressed && !leftPressed ) ddx = +maxAccelleration;
-				if( upPressed && !downPressed ) ddy = +maxAccelleration;
-				if( downPressed && !upPressed ) ddy = -maxAccelleration;
-				if( inPressed && !outPressed ) ddz = +maxAccelleration;
-				if( outPressed && !inPressed ) ddz = -maxAccelleration;
-				setPosition( apf.withAccelleration( System.currentTimeMillis(), ddx, ddy, ddz ) );
-			}
-			
-			@Override public void keyTyped(KeyEvent kevt) {
-				// Doesn't seem to work!
-			}
-			
-			@Override public void keyReleased(KeyEvent kevt) {
-				switch( kevt.getKeyCode() ) {
-				case( KeyEvent.VK_SHIFT ): shiftPressed = false; break;
-				case( KeyEvent.VK_UP    ): case( KeyEvent.VK_W ): upPressed = false; break;
-				case( KeyEvent.VK_LEFT  ): case( KeyEvent.VK_A ): leftPressed = false; break;
-				case( KeyEvent.VK_DOWN  ): case( KeyEvent.VK_S ): downPressed = false; break;
-				case( KeyEvent.VK_RIGHT ): case( KeyEvent.VK_D ): rightPressed = false; break;
-				case( KeyEvent.VK_OPEN_BRACKET ): outPressed = false; break;
-				case( KeyEvent.VK_CLOSE_BRACKET ): inPressed = false; break;
+		KeyListener kl = new SimpleKeyboardKeyListener(new KeyboardCameraController(sp,
+			new GraphicSettingsAdjuster() {
+				@Override public void toggleAa() {
+					sp.antialiasing ^= true;
 				}
-				updateAccelleration();
-			}
-			
-			@Override public void keyPressed(KeyEvent kevt) {
-				switch( kevt.getKeyCode() ) {
-				case( KeyEvent.VK_SPACE ):
-					setPosition( apf.withVelocityAndAccelleration( System.currentTimeMillis(), 0, 0, 0, 0, 0, 0 ) );
-					break;
-				case( KeyEvent.VK_H ):
-					sp.antialiasing = !sp.antialiasing;
-					break;
-				case( KeyEvent.VK_B ):
-					sp.fogBrightness = powerCycle(sp.fogBrightness, -10, +10);
-					break;
-				case( KeyEvent.VK_C ):
-					sp.fogR = (float)(Math.random() * 0.5);
-					sp.fogG = (float)(Math.random() * 0.5);
-					sp.fogB = (float)(Math.random() * 0.5);
-					break;
-				case( KeyEvent.VK_F ):
-					sp.fogOpacity = powerCycle(sp.fogOpacity, -10, +10);
-					break;
-				case( KeyEvent.VK_L ):
-					sp.windowLightMode = (sp.windowLightMode + 1) % ScrollyPaintable.WINDOW_LIGHTS_MODE_COUNT;
-					break;
-				case( KeyEvent.VK_G ):
-					if( shiftPressed ) dbc.autoScaleArea /= 2; else dbc.autoScaleArea *= 2;
+				
+				@Override public void increaseDetail() {
+					dbc.autoScaleArea *= 2;
 					
 					if( dbc.autoScaleArea > 1024 * 1024 ) {
 						dbc.autoScaleArea = 64 * 64;
-					} else if( dbc.autoScaleArea < 64 * 64 ) {
+					}
+				}
+				
+				@Override public void decreaseDetail() {
+					dbc.autoScaleArea /= 2;
+					
+					if( dbc.autoScaleArea < 64 * 64 ) {
 						dbc.autoScaleArea = 1024 * 1024;
 					}
-					break;
-				case( KeyEvent.VK_EQUALS ): case( KeyEvent.VK_PLUS ):
-					sp.baseScale *= 1.5;
-					break;
-				case( KeyEvent.VK_MINUS ):
-					sp.baseScale *= 0.75;
-					break;
-				case( KeyEvent.VK_SHIFT ): shiftPressed = true; break;
-				case( KeyEvent.VK_UP    ): case( KeyEvent.VK_W ): upPressed = true; break;
-				case( KeyEvent.VK_LEFT  ): case( KeyEvent.VK_A ): leftPressed = true; break;
-				case( KeyEvent.VK_DOWN  ): case( KeyEvent.VK_S ): downPressed = true; break;
-				case( KeyEvent.VK_RIGHT ): case( KeyEvent.VK_D ): rightPressed = true; break;
-				case( KeyEvent.VK_OPEN_BRACKET ): outPressed = true; break;
-				case( KeyEvent.VK_CLOSE_BRACKET ): inPressed = true; break;
-
 				}
-				updateAccelleration();
 			}
-		};
+		));
 		for( Component c : this.getComponents() )  c.addKeyListener(kl);
 		addKeyListener(kl);
 		requestFocus();

@@ -1,4 +1,4 @@
-package togos.scrolly1;
+package togos.scrolly1.lwjgl;
 
 import java.awt.Color;
 

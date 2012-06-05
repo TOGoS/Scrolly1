@@ -1,4 +1,4 @@
-package togos.scrolly1;
+package togos.scrolly1.lwjgl;
 
 import java.awt.Canvas;
 import java.awt.Dimension;
@@ -7,40 +7,68 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
 import org.lwjgl.LWJGLException;
+import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.Display;
 import org.lwjgl.opengl.GL11;
 
+import togos.scrolly1.GraphicSettingsAdjuster;
+import togos.scrolly1.KeyboardCameraController;
+import togos.scrolly1.ScrollyPaintable;
+import togos.scrolly1.SimpleKeyboardListener;
 import togos.scrolly1.tfunc.AccellerativePositionFunction;
 
-public class LWJGLThing extends Canvas implements Runnable
+public class LWJGLScrollyCanvas extends Canvas implements Runnable
 {
 	private static final long serialVersionUID = 1L;
 	volatile boolean running = true;
+	volatile boolean aaEnabled = false;
 	
 	public void run() {
 		ScrollyPaintable p = new ScrollyPaintable();
-		// p.baseScale = 0.5;
-		// p.positionFunction = new AccellerativePositionFunction( System.currentTimeMillis(), -4000, 0, 0, 100, 20, 0, 0, 0, 0 );
+		p.positionFunction = new AccellerativePositionFunction( System.currentTimeMillis(), -4000, 0, 0, 100, 20, 0, 0, 0, 0 );
 		JWJGLScrollyGraphicsOutput ren = new JWJGLScrollyGraphicsOutput();
 		p.init();
 		
 		try {
 			Display.setParent(this);
 			Display.create();
-			GL11.glClearColor(0,0.1f,0,1);
-			setFocusable(false);
+			setFocusable(true);
 		} catch( LWJGLException e ) {
 			throw new RuntimeException(e);
 		}
 		
+		SimpleKeyboardListener l = new KeyboardCameraController(p, new GraphicSettingsAdjuster() {
+			@Override public void toggleAa() { aaEnabled ^= true; }
+			@Override public void increaseDetail() {}
+			@Override public void decreaseDetail() {}
+		});
+		
+		GL11.glClearColor(0,0,0,1);
+		
 		while( running ) {
+			while( Mouse.next() );
+			while( Keyboard.next() ) {
+				if( Keyboard.getEventKeyState() ) {
+					l.keyDown(
+						KeyTranslation.lwjglToAwtKeyCode(Keyboard.getEventKey()),
+						Keyboard.getEventCharacter()
+					);
+				} else {
+					l.keyUp(
+						KeyTranslation.lwjglToAwtKeyCode(Keyboard.getEventKey()),
+						Keyboard.getEventCharacter()
+					);
+				}
+			}
+			
 			final int width = getWidth();
 			final int height = getHeight();
 			
 			if( !running ) break;
 			
 			GL11.glEnable(GL11.GL_BLEND);
-			GL11.glEnable(GL11.GL_POLYGON_SMOOTH);
+			if( aaEnabled ) GL11.glEnable(GL11.GL_POLYGON_SMOOTH); else GL11.glDisable(GL11.GL_POLYGON_SMOOTH);
 			GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 			
 			GL11.glViewport(0, 0, width, height);
@@ -64,7 +92,7 @@ public class LWJGLThing extends Canvas implements Runnable
 			Display.sync(120);
 			Display.update();
 		}
-		//Display.destroy();
+		Display.destroy();
 	}
 	
 	public void stop() {
@@ -72,7 +100,7 @@ public class LWJGLThing extends Canvas implements Runnable
 	}
 	
 	public static void main( String[] args ) {
-		final LWJGLThing t = new LWJGLThing();
+		final LWJGLScrollyCanvas t = new LWJGLScrollyCanvas();
 		t.setPreferredSize( new Dimension( 512, 512 ) );
 		final Frame f = new Frame("Scrolly1 (JWJGL)");
 		f.addWindowListener( new WindowAdapter() {
@@ -84,6 +112,7 @@ public class LWJGLThing extends Canvas implements Runnable
 		f.add(t);
 		f.pack();
 		f.setVisible( true );
+		t.requestFocus();
 		new Thread(t).start();
 	}
 }

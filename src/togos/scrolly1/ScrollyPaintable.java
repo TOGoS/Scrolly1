@@ -346,7 +346,7 @@ public class ScrollyPaintable implements TimestampedPaintable
 				sc.clear();
 				for( int k=0; k<heights.length-1; ++k ) {
 					float left = (float)(groundSectionSegmentSize*k - groundSectionSpan/2);
-					float right = (float)(left + groundSectionSegmentSize*1.5);
+					float right = (float)(left + groundSectionSegmentSize*1.1);
 					float top0 = (float)heights[k], top1 = (float)heights[k+1];
 					float bottom0 = top0 - 2000, bottom1 = top1 - 2000;
 					sc.addQuad( left, bottom0, left, top0, right, top1, right, bottom1 );
@@ -418,8 +418,9 @@ public class ScrollyPaintable implements TimestampedPaintable
 	public static final int WINDOW_LIGHTS_NORMAL = 2;
 	public static final int WINDOW_LIGHTS_MODE_COUNT = 3;
 	
-	PositionFunction positionFunction = new ConstantPositionFunction( 0, 0, 0 );
+	public PositionFunction positionFunction = new ConstantPositionFunction( 0, 0, 0 );
 	public boolean antialiasing = false;
+	public boolean drawForegroundFog = true;
 	public double baseScale = 1.0;
 	public float fogBrightness = 1.0f;
 	public float fogOpacity    = 0.002f;
@@ -454,6 +455,10 @@ public class ScrollyPaintable implements TimestampedPaintable
 		
 		double[] pos = new double[3];
 		positionFunction.getPosition(timestamp, pos);
+		
+		if( drawForegroundFog ) {
+			sortedLayers.add( new Layer(pos[2]+10, Collections.EMPTY_LIST) );
+		}
 		
 		double prevLayerDist = 16000;
 		for( Layer l : sortedLayers ) {
