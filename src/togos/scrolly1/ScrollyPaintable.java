@@ -2,18 +2,15 @@ package togos.scrolly1;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
-import java.awt.LinearGradientPaint;
-import java.awt.Polygon;
-import java.awt.Rectangle;
 import java.awt.RenderingHints;
-import java.awt.Shape;
-import java.awt.geom.AffineTransform;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 
+import togos.scrolly1.gfx.AWTRenderer;
+import togos.scrolly1.gfx.Renderer;
 import togos.scrolly1.noise.Add;
 import togos.scrolly1.noise.Constant;
 import togos.scrolly1.noise.D5_2Perlin;
@@ -40,52 +37,124 @@ public class ScrollyPaintable implements TimestampedPaintable
 		}
 	}
 	
-	class LayerObject {
-		final ColorFunction color;
-		final Shape shape;
+	interface Drawable {
+		public abstract void draw( long timestamp, Renderer ren );
+	}
+	
+	static class DrawableShape implements Drawable {
+		static final float[] EMPTY_FLOAT_ARRAY = new float[0];
+		
+		final int nQuads, nTriangles;
+		final float[] quadPointsX, quadPointsY, trianglePointsX, trianglePointsY;
+		
+		public DrawableShape( int nQuads, float[] quadPointsX, float[] quadPointsY, int nTriangles, float[] trianglePointsX, float[] trianglePointsY ) {
+			this.nQuads = nQuads; this.quadPointsX = quadPointsX; this.quadPointsY = quadPointsY;
+			this.nTriangles = nTriangles; this.trianglePointsX = trianglePointsX; this.trianglePointsY = trianglePointsY;
+		}
+		
+		@Override public void draw(long timestamp, Renderer ren) {
+			if( nQuads > 0 ) ren.quads( quadPointsX, quadPointsY, nQuads );
+			if( nTriangles > 0 ) ren.triangles( trianglePointsX, trianglePointsY, nTriangles );
+		}
+		
+		public static DrawableShape rectangle( float x, float y, float w, float h ) {
+			return new DrawableShape( 1, new float[]{x, x+w, x+w, x}, new float[]{y, y, y+h, y+h}, 0, EMPTY_FLOAT_ARRAY, EMPTY_FLOAT_ARRAY );
+		}
+	}
+	
+	static class ShapeCreator {
+		float[] quadX = new float[128];
+		float[] quadY = new float[128];
+		float[] triX = new float[128];
+		float[] triY = new float[128];
+		int quadCount = 0;
+		int triCount = 0;
+		
+		public ShapeCreator addQuad( float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3 ) {
+			int i = quadCount*4;
+			quadX[i] = x0; quadY[i] = y0; ++i;
+			quadX[i] = x1; quadY[i] = y1; ++i;
+			quadX[i] = x2; quadY[i] = y2; ++i;
+			quadX[i] = x3; quadY[i] = y3;
+			++quadCount;
+			return this;
+		}
+		
+		public ShapeCreator addTriangle( float x0, float y0, float x1, float y1, float x2, float y2 ) {
+			int i = triCount*4;
+			triX[i] = x0; triY[i] = y0; ++i;
+			triX[i] = x1; triY[i] = y1; ++i;
+			triX[i] = x2; triY[i] = y2; ++i;
+			++triCount;
+			return this;
+		}
+		
+		public ShapeCreator clear() {
+			quadCount = triCount = 0;
+			return this;
+		}
+		
+		public DrawableShape toShape() {
+			float[] qx = quadCount == 0 ? DrawableShape.EMPTY_FLOAT_ARRAY : new float[quadCount*4];
+			float[] qy = quadCount == 0 ? DrawableShape.EMPTY_FLOAT_ARRAY : new float[quadCount*4];
+			float[] tx = quadCount == 0 ? DrawableShape.EMPTY_FLOAT_ARRAY : new float[triCount*3];
+			float[] ty = quadCount == 0 ? DrawableShape.EMPTY_FLOAT_ARRAY : new float[triCount*3];
+			for( int i=quadCount*4-1; i>=0; --i ) {
+				qx[i] = quadX[i];
+				qy[i] = quadY[i];
+			}
+			for( int i=triCount*3-1; i>=0; --i ) {
+				qx[i] = triX[i];
+				qy[i] = triY[i];
+			}
+			return new DrawableShape( quadCount, qx, qy, triCount, tx, ty );
+		}
+	}
+	
+	class BasicDrawable implements Drawable {
+		final ColorFunction cf;
+		final DrawableShape shape;
 		final List<LayerObjectInstance> subObjects;
 		
-		public LayerObject( ColorFunction c, Shape s, List<LayerObjectInstance> subObjects ) {
-			this.color = c;
+		public BasicDrawable( ColorFunction cf, DrawableShape s, List<LayerObjectInstance> subObjects ) {
+			this.cf = cf;
 			this.shape = s;
 			this.subObjects = subObjects;
 		}
 		
-		public LayerObject( ColorFunction c, Shape s ) {
-			this( c, s, Collections.EMPTY_LIST );
+		public BasicDrawable( ColorFunction cf, DrawableShape s ) {
+			this( cf, s, Collections.EMPTY_LIST );
 		}
 		
-		protected void drawBody( long timestamp, Graphics2D g2d ) {
-			g2d.setColor( color.getAwtColor(timestamp) );
-			g2d.fill( shape );
-		}
-		
-		public void draw( long timestamp, Graphics2D g2d ) {
-			drawBody( timestamp, g2d );
-			AffineTransform oldXf = g2d.getTransform();
+		@Override public void draw( long timestamp, Renderer ren ) { 
+			ren.setColor( cf.getAwtColor(timestamp) );
+			shape.draw(timestamp, ren);
+			Object oldXf = ren.getTransform();
 			for( LayerObjectInstance soi : subObjects ) {
-				_draw( soi, timestamp, g2d );
-				g2d.setTransform(oldXf);
+				_draw( soi, timestamp, ren );
+				ren.setTransform(oldXf);
 			}
 		}
 	}
 	
-	class Building extends LayerObject {
+	class Building implements Drawable {
+		final DrawableShape bodyShape;
 		final List<LayerObjectInstance> windows;
 		
-		public Building(ColorFunction c, Shape s, List<LayerObjectInstance> subObjects, List<LayerObjectInstance> windows ) {
-			super(c, s, subObjects);
+		public Building( DrawableShape s, List<LayerObjectInstance> windows ) {
+			this.bodyShape = s;
 			this.windows = windows;
 		}
 		
-		@Override protected void drawBody( long timestamp, Graphics2D g2d ) {
-			super.drawBody( timestamp, g2d );
+		@Override public void draw( long timestamp, Renderer ren ) {
+			ren.setColor( Color.BLACK );
+			bodyShape.draw(timestamp, ren);
 			switch( windowLightMode ) {
 			case( WINDOW_LIGHTS_NORMAL ):
-				AffineTransform oldXf = g2d.getTransform();
+				Object oldXf = ren.getTransform();
 				for( LayerObjectInstance soi : windows ) {
-					_draw( soi, timestamp, g2d );
-					g2d.setTransform(oldXf);
+					_draw( soi, timestamp, ren );
+					ren.setTransform(oldXf);
 				}
 				break;
 			}
@@ -95,15 +164,15 @@ public class ScrollyPaintable implements TimestampedPaintable
 	class LayerObjectInstance {
 		final double x, y, scale;
 		final ScalarFunction rot;
-		final LayerObject o;
+		final Drawable o;
 		
-		public LayerObjectInstance( double x, double y, ScalarFunction rot, double scale, LayerObject o ) {
+		public LayerObjectInstance( double x, double y, ScalarFunction rot, double scale, Drawable o ) {
 			this.x = x; this.y = y;
 			this.rot = rot; this.scale = scale;
 			this.o = o;
 		}
 		
-		public LayerObjectInstance( double x, double y, LayerObject o ) {
+		public LayerObjectInstance( double x, double y, Drawable o ) {
 			this( x, y, ConstantScalarFunction.ZERO, 1, o );
 		}
 	}
@@ -155,22 +224,22 @@ public class ScrollyPaintable implements TimestampedPaintable
 	public ScrollyPaintable() {
 	}
 	
-	protected LayerObject mast( double height, int nLights, int lightSide, long lightPhase ) {
+	protected Drawable mast( double height, int nLights, int lightSide, long lightPhase ) {
 		List<LayerObjectInstance> mastLights = new ArrayList();
 		for( int i=1; i<=nLights; ++i ) {
-			mastLights.add( new LayerObjectInstance( lightSide, height * i / nLights, new LayerObject( new PulsatingColorFunction(-1, 1, 0, 0, 1, 1, 0, 0, 2000, lightPhase + 2000 * -i / nLights ), new Rectangle( -2, -2, 4, 4) ) ) );
+			mastLights.add( new LayerObjectInstance( lightSide, height * i / nLights, new BasicDrawable( new PulsatingColorFunction(-1, 1, 0, 0, 1, 1, 0, 0, 2000, lightPhase + 2000 * -i / nLights ), DrawableShape.rectangle( -2, -2, 4, 4) ) ) );
 		}
 		if( height > 180 )
-			mastLights.add( new LayerObjectInstance(-lightSide, height, new LayerObject( new PulsatingColorFunction(-1, 1, 1, 1, 1, 1, 1, 1, 1500, lightPhase), new Rectangle( -3, -3, 6, 6) ) ) );
-		return new LayerObject( BLACK, new Rectangle( -2, -20, 4, (int)(height + 20) ), mastLights );
+			mastLights.add( new LayerObjectInstance(-lightSide, height, new BasicDrawable( new PulsatingColorFunction(-1, 1, 1, 1, 1, 1, 1, 1, 1500, lightPhase), DrawableShape.rectangle( -3, -3, 6, 6) ) ) );
+		return new BasicDrawable( BLACK, DrawableShape.rectangle( -2, -20, 4, (int)(height + 20) ), mastLights );
 	}
 	
-	protected LayerObject mast( Random r ) {
+	protected Drawable mast( Random r ) {
 		double height = 180 + r.nextGaussian() * 60;
 		return mast( height, (int)(height / 60 + r.nextInt(1)), r.nextInt(3) - 1, r.nextInt() % 4000 );
 	}
 	
-	protected LayerObject building( Random r ) {
+	protected Drawable building( Random r ) {
 		int windowWidth = 1+r.nextInt(3);
 		int windowHeight = 1+r.nextInt(3);
 		int windowSeparation = 1 + r.nextInt(3);
@@ -190,9 +259,9 @@ public class ScrollyPaintable implements TimestampedPaintable
 				if( allLightsOn || r.nextDouble() < lightChance ) {
 					int roomX = baseX + windowSeparation + p * (windowWidth+windowSeparation)*2;
 					windows.add( new LayerObjectInstance( roomX, f*floorHeight,
-						new LayerObject( WINDOW_COLOR, new Rectangle(windowWidth, windowHeight))));
+						new BasicDrawable( WINDOW_COLOR, DrawableShape.rectangle(0, 0, windowWidth, windowHeight))));
 					windows.add( new LayerObjectInstance( roomX + windowWidth+windowSeparation, f*floorHeight,
-						new LayerObject( WINDOW_COLOR, new Rectangle(windowWidth, windowHeight))));
+						new BasicDrawable( WINDOW_COLOR, DrawableShape.rectangle(0, 0, windowWidth, windowHeight))));
 				}
 			}
 			lightChance += r.nextGaussian() * 0.2;
@@ -200,14 +269,16 @@ public class ScrollyPaintable implements TimestampedPaintable
 			if( lightChance > 1 ) lightChance = 1;
 		}
 		
-		return new Building( BLACK, new Rectangle(baseX, -20, width, floorsHigh*floorHeight + 20), Collections.EMPTY_LIST, windows ); 
+		return new Building( DrawableShape.rectangle(baseX, -20, width, floorsHigh*floorHeight + 20), windows ); 
 	}
 	
+	ShapeCreator sc = new ShapeCreator();
+	
 	public void init() {
-		LayerObject o2 = new LayerObject( BLACK, new Rectangle( - 2, -10, 20,  40 ), Collections.EMPTY_LIST );
-		LayerObject o3 = new LayerObject( BLACK, new Rectangle( -20, -20, 40,  80 ), Collections.EMPTY_LIST );
-		LayerObject o4 = new LayerObject( BLACK, new Rectangle( -20, -20, 20,  40 ), Collections.EMPTY_LIST );
-		LayerObject o5 = new LayerObject( BLACK, new Rectangle( -20, -20, 40, 160 ), Collections.EMPTY_LIST );
+		Drawable o2 = new BasicDrawable( BLACK, DrawableShape.rectangle( - 2, -10, 20,  40 ) );
+		Drawable o3 = new BasicDrawable( BLACK, DrawableShape.rectangle( -20, -20, 40,  80 ) );
+		Drawable o4 = new BasicDrawable( BLACK, DrawableShape.rectangle( -20, -20, 20,  40 ) );
+		Drawable o5 = new BasicDrawable( BLACK, DrawableShape.rectangle( -20, -20, 40, 160 ) );
 		
 		/*
 		List<LayerObjectInstance> mastLights = new ArrayList();
@@ -219,7 +290,9 @@ public class ScrollyPaintable implements TimestampedPaintable
 		LayerObject mast = new LayerObject( BLACK, new Rectangle( -2, -20, 4, 260 ), mastLights );
 		*/
 		
-		LayerObject pineTree = new LayerObject( BLACK, new Polygon( new int[] { -1, -1, -4, 0, 4, 1, 1 }, new int[]{ -2, 0, 0, 15, 0, 0, -2 }, 7 ) );
+		Drawable pineTree = new BasicDrawable( BLACK,
+			new ShapeCreator().addQuad(-1, -2, -1, 1, 1, 1, 1, -2).addTriangle(-4, 1, 0, 15, 4, 1).toShape()
+		);
 		
 		Random r = new Random(123123);
 		
@@ -234,10 +307,10 @@ public class ScrollyPaintable implements TimestampedPaintable
 			};
 		}
 		
-		int segmentsPerGroundSection = 8;
-		double[] px = new double[segmentsPerGroundSection+2];
-		double[] py = new double[segmentsPerGroundSection+2];
-		double[] pz = new double[segmentsPerGroundSection+2];
+		int segmentsPerGroundSection = 4;
+		double[] px = new double[segmentsPerGroundSection+1];
+		double[] py = new double[segmentsPerGroundSection+1];
+		double[] pz = new double[segmentsPerGroundSection+1];
 		
 		int[] dists = {
 			40, 70, 100, 150, 200, 300, 400, 800, 1200, 1600, 2000, 4000
@@ -248,7 +321,7 @@ public class ScrollyPaintable implements TimestampedPaintable
 			int dist = dists[i];
 			List<LayerObjectInstance> layerObjects = new ArrayList();
 			
-			double groundSectionSegmentSize = dist / 16;
+			double groundSectionSegmentSize = dist / 12;
 			double groundSectionSpan = groundSectionSegmentSize*segmentsPerGroundSection;
 			
 			// Generate ground sections
@@ -262,13 +335,24 @@ public class ScrollyPaintable implements TimestampedPaintable
 				double minHeight = 99999;
 				for( int k=0; k<heights.length; ++k ) minHeight = Math.min( minHeight, heights[k] );
 				
+				/*
 				Polygon p = new Polygon();
 				p.addPoint( (int)(groundSectionSegmentSize*(heights.length-1)-(groundSectionSpan/2)), (int)(minHeight-2000) );
 				p.addPoint( (int)(-(groundSectionSpan/2)), (int)(minHeight-2000) );
 				for( int k=0; k<heights.length; ++k ) {
 					p.addPoint( (int)(groundSectionSegmentSize*k - groundSectionSpan/2), (int)(heights[k]) );
 				}
-				layerObjects.add( new LayerObjectInstance( j+groundSectionSpan/2, 0, new LayerObject( BLACK, p, Collections.EMPTY_LIST ) ) );
+				*/
+				sc.clear();
+				for( int k=0; k<heights.length-1; ++k ) {
+					float left = (float)(groundSectionSegmentSize*k - groundSectionSpan/2);
+					float right = (float)(left + groundSectionSegmentSize*1.5);
+					float top0 = (float)heights[k], top1 = (float)heights[k+1];
+					float bottom0 = top0 - 2000, bottom1 = top1 - 2000;
+					sc.addQuad( left, bottom0, left, top0, right, top1, right, bottom1 );
+				}
+				
+				layerObjects.add( new LayerObjectInstance( j+groundSectionSpan/2, 0, new BasicDrawable( BLACK, sc.toShape(), Collections.EMPTY_LIST ) ) );
 				
 				j += groundSectionSpan;
 			}
@@ -342,22 +426,16 @@ public class ScrollyPaintable implements TimestampedPaintable
 	public float fogR = 0.35f, fogG = 0.3f, fogB = 0.4f;
 	public int windowLightMode = WINDOW_LIGHTS_NORMAL;
 	
-	@Override
-	public void paint(long timestamp, int width, int height, Graphics2D g2d) {
-		if( antialiasing ) {
-			g2d.setRenderingHint( RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON );
-			g2d.setRenderingHint( RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY );
-		}
-		
+	public void paint(long timestamp, int width, int height, Renderer ren) {
 		Random r = new Random(123123);
 		
-		g2d.setColor( Color.BLACK );
-		g2d.fillRect(0,  0, width, height);
+		ren.setColor( Color.BLACK );
+		ren.fill();
 		
 		// Draw stars:
 		for( int i=width*height/256; i>=0; --i ) {
-			g2d.setColor( starColors[r.nextInt(starColors.length)] );
-			g2d.fillRect( r.nextInt(width), r.nextInt(height), 1, 1 );
+			ren.setColor( starColors[r.nextInt(starColors.length)] );
+			ren.pixel( r.nextInt(width), r.nextInt(height) );
 		}
 		
 		ArrayList<Layer> sortedLayers = new ArrayList<Layer>(layers);
@@ -369,49 +447,27 @@ public class ScrollyPaintable implements TimestampedPaintable
 			}
 		});
 		
-		g2d.translate( width/2, height/2 );
-		AffineTransform baseTransform = g2d.getTransform();
+		ren.translate( width/2, height/2 );
+		Object baseTransform = ren.getTransform();
 		
 		double[] pos = new double[3];
 		positionFunction.getPosition(timestamp, pos);
-		
-		//double worldCenterX = (timestamp - beginTimestamp) / 10f;
-		// double worldCenterY = 10 + (timestamp - beginTimestamp) / 400f;
-		// double worldCenterY = value( groundHeight, worldCenterX, 0, 0 ) + 10;
-		//double worldCenterY = 300 + 300 * TMath.periodic(timestamp, 32000);
-		
-		LinearGradientPaint fogPaint = new LinearGradientPaint(0, 0, 0, 4096,
-			new float[] { 0.0f, 0.15f, 0.3f, 0.6f, 1.0f },
-			new Color[] {
-				fogColor( 0.20f ),
-				fogColor( 0.10f ),
-				fogColor( 0.05f ),
-				fogColor( 0.01f ),
-				fogColor( 0.00f ),
-			}
-		);
 		
 		for( Layer l : sortedLayers ) {
 			if( l.distance - pos[2] < 10 ) continue;
 			
 			double scale = baseScale * height / 3 / (l.distance - pos[2]);
 			
-			g2d.scale( scale, -scale );
+			ren.scale( scale, -scale );
 			
+			// World positions of screen coordinates:
 			double worldScreenWidth = width/scale;
-			double worldScreenHeight = height/scale;
 			double worldScreenRight = pos[0] - worldScreenWidth/2;
-			double worldScreenBottom = pos[1] - worldScreenHeight/2;
-					
-			g2d.translate( -pos[0], -pos[1] );
+			double worldScreenLeft = worldScreenRight + worldScreenWidth;
 			
-			//Color topColor = new Color( 0.35f, 0.3f, 0.4f, 0.01f );
-			//Color topColor = new Color( 0.0f, 0.0f, 0.0f, 0.00f );
-			//Color bottomColor = new Color( 0.35f, 0.3f, 0.4f, 0.2f );
-			g2d.setPaint( fogPaint ); //new GradientPaint(0, 0, bottomColor, 0, 512, topColor) );
-			g2d.fillRect(
-				(int)(worldScreenRight-2), (int)(worldScreenBottom-2),
-				(int)(worldScreenWidth+4), (int)(worldScreenHeight+4) );
+			ren.translate( -pos[0], -pos[1] );
+			
+			ren.verticalGradient( (float)worldScreenRight-2, -1024, (float)worldScreenLeft+2, 4096, fogColor(0.4f), fogColor(0.0f));
 			
 			/** Estimate of maximum distance (in world units)
 			 * outside the screen something might be that we should still draw */
@@ -433,24 +489,34 @@ public class ScrollyPaintable implements TimestampedPaintable
 				--beginIdx;
 			}
 			final int objCount = l.objects.size();
-			AffineTransform xf = g2d.getTransform();
+			Object xf = ren.getTransform();
 			for( int idx = beginIdx; idx < objCount ; ++idx ) {
 				LayerObjectInstance loi = l.objects.get(idx);
 				try {
 					if( loi.x - maxRad > worldScreenRight + worldScreenWidth ) break;
-					_draw( loi, timestamp, g2d );
+					_draw( loi, timestamp, ren );
 				} finally {
-					g2d.setTransform(xf);
+					ren.setTransform(xf);
 				}
 			}
-			g2d.setTransform( baseTransform );
+			ren.setTransform( baseTransform );
 		}
 	}
+	
+	@Override
+	public void paint(long timestamp, int width, int height, Graphics2D g2d) {
+		if( antialiasing ) {
+			g2d.setRenderingHint( RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON );
+			g2d.setRenderingHint( RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY );
+		}
+		
+		paint( timestamp, width, height, new AWTRenderer(g2d));
+	}
 
-	protected void _draw(LayerObjectInstance loi, long timestamp, Graphics2D g2d) {
-		g2d.translate( loi.x, loi.y );
-		g2d.rotate( loi.rot.getValue(timestamp) );
-		g2d.scale( loi.scale, loi.scale );
-		loi.o.draw(timestamp, g2d);
+	protected void _draw( LayerObjectInstance loi, long timestamp, Renderer ren ) {
+		ren.translate( loi.x, loi.y );
+		ren.rotate( loi.rot.getValue(timestamp) );
+		ren.scale( loi.scale, loi.scale );
+		loi.o.draw(timestamp, ren);
 	}
 }
